@@ -40,6 +40,7 @@ REGEN_PASSWORD=0
 SKIP_TESTS=0
 REPO_URL="${REPO_URL:-}"
 REF="main"
+# shellcheck disable=SC1007  # CDPATH= 前缀是 POSIX 安全的 cd 惯用法,空格为刻意
 SRC_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 LOG="/tmp/wordpress-mcp-install.log"
 : > "$LOG"
@@ -127,7 +128,7 @@ log "WordPress: $WP_ROOT"
 if [ -z "$PHP_SOCKET" ]; then
     PHP_SOCKET=$(grep -rhoE '^listen *= *[^;]+\.sock' /etc/php/*/fpm/pool.d/*.conf 2>/dev/null \
         | head -1 | awk -F'= ' '{print $2}' | tr -d '[:space:]')
-    [ -z "$PHP_SOCKET" ] && PHP_SOCKET=$(ls /run/php/*.sock 2>/dev/null | head -1)
+    [ -z "$PHP_SOCKET" ] && PHP_SOCKET=$(find /run/php -maxdepth 1 -name '*.sock' -print -quit 2>/dev/null)
 fi
 [ -n "$PHP_SOCKET" ] || fail "未找到 PHP-FPM 套接字,请用 --php-socket 指定"
 log "PHP-FPM 套接字: $PHP_SOCKET"
