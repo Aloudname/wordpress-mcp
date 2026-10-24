@@ -23,6 +23,10 @@
 # =============================================================================
 set -eu
 
+# SSH 非交互 shell 的 PATH 可能不含 /usr/sbin(nginx 等)
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+export PATH
+
 # ---- 默认值 ---------------------------------------------------------------
 SERVER_DIR="/home/pi/wordpress-mcp"
 WP_ROOT=""
@@ -103,7 +107,7 @@ log "源码: $SRC_DIR"
 # ---- 2. 部署到安装目录 ----------------------------------------------------
 step "部署源码到 $SERVER_DIR"
 $SUDO mkdir -p "$SERVER_DIR/wordpress_mcp" "$SERVER_DIR/bin" "$SERVER_DIR/tests" "$SERVER_DIR/setup"
-for f in wordpress_mcp/*.py; do $SUDO cp "$f" "$SERVER_DIR/wordpress_mcp/"; done
+for f in "$SRC_DIR"/wordpress_mcp/*.py; do $SUDO cp "$f" "$SERVER_DIR/wordpress_mcp/"; done
 $SUDO cp "$SRC_DIR/bin/mcp-server" "$SERVER_DIR/bin/mcp-server"
 $SUDO chmod +x "$SERVER_DIR/bin/mcp-server"
 $SUDO cp "$SRC_DIR/tests/"*.py "$SERVER_DIR/tests/"
