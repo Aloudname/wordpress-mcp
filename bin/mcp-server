@@ -1,8 +1,8 @@
 #!/bin/sh
-# MCP stdio 入口 — 由客户端(Claude Code / Codex)通过 SSH 调用:
+# mcp stdio entry point, invoked by clients over ssh:
 #   ssh pi@mypi /home/pi/wordpress-mcp/bin/mcp-server
 set -eu
-# shellcheck disable=SC1007  # CDPATH= 前缀是 POSIX 安全的 cd 惯用法,空格为刻意
+# shellcheck disable=SC1007  # CDPATH= prefix is the posix-safe cd idiom; the space is intentional
 DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-cd "$DIR"   # python -m 依赖 cwd 定位包
+cd "$DIR"   # python -m resolves the package from cwd
 exec "$DIR/venv/bin/python" -m wordpress_mcp

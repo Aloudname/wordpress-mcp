@@ -1,12 +1,12 @@
-"""MCP server exposing WordPress blog editing tools (stdio transport).
+"""mcp server exposing wordpress blog editing tools (stdio transport).
 
-Tool naming: all WordPress tools are prefixed with ``wp_`` to avoid
-collisions with other MCP servers in the same agent session.
+tool naming: all wordpress tools are prefixed with ``wp_`` to avoid
+collisions with other mcp servers in the same agent session.
 
-Safety design:
-- 创建文章默认草稿(draft),审阅后再发布
-- 删除默认移入回收站(trash),永久删除需要显式传 trash=false
-- 服务以专用用户 mcp_agent(editor 角色)访问 WordPress,最小权限
+safety design:
+- new posts default to draft, publish after review
+- delete defaults to trash, permanent delete needs explicit trash=false
+- the server uses the dedicated mcp_agent user (editor role), least privilege
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ mcp = MCPServer(
     ),
 )
 
-client = WordpressClient()  # 启动即校验配置,失败快速退出
+client = WordpressClient()  # validate config at startup, fail fast
 
 
 # ---- helpers ----------------------------------------------------------

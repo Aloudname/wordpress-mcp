@@ -1,7 +1,7 @@
-"""Live smoke tests against the real WordPress site.
+"""live smoke tests against the real wordpress site.
 
-Non-destructive: creates one draft post, updates it, then trashes and
-permanently removes it; uploads one tiny PNG and removes it. Nothing is
+non-destructive: creates one draft post, updates it, then trashes and
+permanently removes it; uploads one tiny png and removes it. nothing is
 ever published.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from wordpress_mcp.wp_client import WordpressClient  # noqa: E402
 
-# 1x1 透明 PNG
+# 1x1 transparent png
 _PNG_1PX = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 )
@@ -36,14 +36,14 @@ def main() -> int:
     c = WordpressClient()
     stamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # 0. 清理历史测试残留(任何状态下标题带 __mcp_smoke_ 的文章)
+    # 0. remove leftovers from previous runs (any status)
     leftovers, _ = c.list_posts(status="any", search="__mcp_smoke_", per_page=100)
     for p in leftovers:
         c.delete_post(p["id"], trash=False)
     if leftovers:
         print(f"[ok] 清理历史残留 {len(leftovers)} 篇")
 
-    # 1. 基础读取:分类/标签/媒体列表
+    # 1. read-only listings
     cats, ctotal = c.list_categories()
     tags, ttotal = c.list_tags()
     media, mtotal = c.list_media(per_page=1)
@@ -51,14 +51,14 @@ def main() -> int:
           isinstance(cats, list) and isinstance(tags, list) and isinstance(media, list),
           f"categories={ctotal} tags={ttotal} media={mtotal}")
 
-    # 2. Markdown <-> HTML 往返
+    # 2. markdown <-> html roundtrip
     html = c.md_to_html("# 测试标题\n\n**加粗** 和 *斜体*\n\n- 列表项")
     md = c.html_to_md(html)
     check("markdown <-> html roundtrip",
           "测试标题" in md and "加粗" in md, repr(md[:80]))
 
-    # 3. 草稿生命周期:创建 -> 更新 -> 按 id/slug 读取 -> 回收站 -> 永久删除
-    # 注意:WP 对草稿不自动生成 slug,故显式指定 slug 以便按 slug 查询
+    # 3. draft lifecycle: create -> update -> read by id/slug -> trash -> purge
+    # wp does not generate slugs for drafts, so pass an explicit slug
     slug = f"__mcp_smoke_{stamp}"
     post = c.create_post(title=slug, content=html, status="draft", slug=slug)
     pid = post["id"]
@@ -77,16 +77,16 @@ def main() -> int:
 
     trashed = c.delete_post(pid, trash=True)
     check("delete_post 移入回收站", trashed["status"] == "trash")
-    c.delete_post(pid, trash=False)  # 清理测试残留
+    c.delete_post(pid, trash=False)  # purge test residue
 
-    # 4. 媒体上传 -> 删除
+    # 4. media upload -> delete
     item = c.upload_media(filename=f"smoke-{stamp}.png",
                           base64_data=base64.b64encode(_PNG_1PX).decode(),
                           alt_text="smoke test image")
     check("upload_media", item["id"] > 0 and "source_url" in item, item.get("source_url", ""))
     c.delete_media(item["id"])
 
-    # 5. 分类名/ID 解析
+    # 5. category name/id resolution
     name = cats[0]["name"]
     ids = c.resolve_category_ids([name, cats[0]["id"]])
     check("resolve_category_ids 名称+ID", len(ids) == 2 and ids[0] == ids[1], repr(name))

@@ -1,19 +1,19 @@
 #!/bin/sh
-# =============================================================================
-# wordpress-mcp 卸载
+# wordpress-mcp uninstaller
 #
-# 用法: bash uninstall.sh [选项]
-#   默认移除: nginx 回环块、TLS 证书、PHP 加固行、安装目录
-#   默认保留: WordPress 用户与应用密码(如需删除加 --with-wp-user)
+# usage: bash uninstall.sh [options]
+#   removes by default: the nginx loopback block, the tls certificate,
+#   the php hardening line, and the install dir.
+#   keeps by default: the wordpress user and its application passwords
+#   (pass --with-wp-user to delete them too).
 #
-# 选项:
-#   --server-dir DIR     安装目录(默认 /home/pi/wordpress-mcp)
-#   --wp-root DIR        WordPress 根目录(仅 --with-wp-user 时需要,默认自动探测)
-#   --keep-hardening     保留 PHP display_errors 加固行
-#   --with-wp-user       同时删除 WordPress 用户及其全部应用密码
-#   --no-reload          不重载 nginx / 不重启 FPM(由你自行处理)
-#   -h, --help           帮助
-# =============================================================================
+# options:
+#   --server-dir DIR     install dir (default /home/pi/wordpress-mcp)
+#   --wp-root DIR        wordpress root (needed only with --with-wp-user, default: auto-detect)
+#   --keep-hardening     keep the php display_errors hardening line
+#   --with-wp-user       also delete the wordpress user and all its app passwords
+#   --no-reload          do not reload nginx / restart fpm
+#   -h, --help           show help
 set -eu
 
 SERVER_DIR="/home/pi/wordpress-mcp"
@@ -26,7 +26,7 @@ SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"
 
 usage() {
-    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 }
 
@@ -57,12 +57,12 @@ if [ "$NO_RELOAD" = "0" ]; then
 fi
 echo "[ok] nginx 回环块已移除"
 
-# 2. 证书
+# 2. tls certificate
 $SUDO rm -f /etc/nginx/ssl/loopback.crt /etc/nginx/ssl/loopback.key
 $SUDO rmdir /etc/nginx/ssl 2>/dev/null || true
 echo "[ok] TLS 证书已移除"
 
-# 3. PHP 加固行
+# 3. php hardening line
 if [ "$KEEP_HARDENING" = "0" ]; then
     POOL_FILES=$(grep -l '\[wordpress-mcp\]' /etc/php/*/fpm/pool.d/*.conf 2>/dev/null || true)
     for f in $POOL_FILES; do
@@ -75,7 +75,7 @@ if [ "$KEEP_HARDENING" = "0" ]; then
     echo "[ok] PHP 加固行已移除"
 fi
 
-# 4. WordPress 用户
+# 4. wordpress user
 if [ "$WITH_WP_USER" = "1" ]; then
     [ -z "$WP_ROOT" ] && WP_ROOT=$(find /var/www -maxdepth 3 -name wp-load.php 2>/dev/null | head -1 | sed 's|/wp-load.php||')
     [ -n "$WP_ROOT" ] || { echo "[跳过] 未找到 wp-load.php,无法删除用户" >&2; }
@@ -96,7 +96,7 @@ PHPEOF
     fi
 fi
 
-# 5. 安装目录
+# 5. install dir
 $SUDO rm -rf "$SERVER_DIR"
 echo "[ok] 安装目录已移除: $SERVER_DIR"
 

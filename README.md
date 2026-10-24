@@ -1,103 +1,99 @@
 # wordpress-mcp
 
-让 **Claude Code** 与 **Codex** 获得 WordPress 博客的编辑与排版能力:文章/页面增删改查、分类标签、媒体上传、Markdown 排版转换,全部通过标准的 MCP(stdio)协议。
+为 Claude Code 与 Codex 提供 WordPress 编辑接口的 MCP 服务器(stdio 传输)。
 
-- 🔒 **安全默认**:创建即草稿、删除进回收站、媒体类型白名单、最小权限专用用户、密钥不出服务器
-- 📦 **一键安装**:树莓派跑 `install.sh`,Windows 跑 `install.ps1`,幂等可重复执行
-- 🧪 **自带测试**:安装后自动对真实站点跑两套非破坏性测试
+支持文章与页面的增删改查、分类与标签查询、媒体上传、Markdown 与 HTML 互转。WordPress 调用全部在服务器本机回环完成,凭据不离开服务器。
 
 ## 架构
 
 ```
 Claude Code / Codex (Windows)
-   │ stdio JSON-RPC over SSH(复用已有 SSH 密钥,客户端零凭据)
-   ▼
+  stdio JSON-RPC over SSH
+  ↓
 WordPress 主机(如树莓派)/home/pi/wordpress-mcp
-   │ 按需进程: venv/bin/python -m wordpress_mcp
-   ▼
-https://127.0.0.1:8443(nginx 回环自签 TLS,独立无缓存站点块)
-   │ Basic Auth: 专用用户 mcp_agent(editor 角色)的应用密码
-   ▼
+  按需进程:venv/bin/python -m wordpress_mcp
+  ↓
+https://127.0.0.1:8443(nginx 回环自签 TLS,独立站点块,无缓存)
+  Basic Auth:专用用户 mcp_agent(editor 角色)的应用密码
+  ↓
 WordPress REST API(wp/v2)
 ```
 
-设计要点:
+## 安全模型
 
-- **传输**:stdio 走 SSH,客户端不保存任何 WordPress 凭据;应用密码只存在服务器 `config.env`(0600)
-- **安全模型**:回环 HTTPS 满足 WordPress「应用密码仅限 HTTPS」的核心要求,不修改 `wp-config.php`、不弱化任何安全控制
-- **无缓存**:MCP 入口刻意不接主站点的 fastcgi 缓存,保证编辑后读到的永远是最新内容
-- **按需进程**:无常驻守护,每个客户端会话拉起一个实例,配置错误启动即失败(stderr 可见)
+- 应用密码只存于服务器 `config.env`(0600);客户端仅持有 SSH 密钥。
+- 回环 HTTPS 满足 WordPress 对应用密码的强制要求,不改 `wp-config.php`。
+- MCP 入口不接主站点 fastcgi 缓存,编辑后读取不会返回过期内容。
+- 新建文章默认草稿,删除默认进回收站;媒体上传有类型白名单。
+- 服务器无常驻进程,客户端会话按需拉起;配置错误启动即失败。
 
-## 快速开始
+## 安装
 
-### 1. 服务器侧(WordPress 主机,Debian 系)
+### 服务器侧(Debian 系)
+
+前提:Python ≥ 3.9、PHP CLI、nginx、openssl、curl,当前用户可 sudo。
 
 ```bash
 git clone https://github.com/Aloudname/wordpress-mcp.git
 cd wordpress-mcp
-bash install.sh          # 幂等;自动探测 WordPress 与 PHP-FPM
+bash install.sh
 ```
 
-或管道安装(需指定仓库地址):
+安装器依次完成:自动探测 WordPress 根目录与 PHP-FPM 套接字;创建 venv 并安装锁定版本依赖;创建 `mcp_agent` 用户(editor)并签发应用密码;生成回环自签证书;写入独立 nginx 站点块(127.0.0.1:8443);PHP 8.4 display_errors 池级加固;运行两套测试。重复执行幂等。
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/<你>/wordpress-mcp/main/install.sh \
-  | REPO_URL=https://github.com/Aloudname/wordpress-mcp bash
-```
+可选参数:`--wp-root`、`--php-socket`、`--port`、`--server-dir`、`--mirror`、`--regen-password`、`--no-harden-php`、`--skip-tests`。
 
-前置要求:Python ≥ 3.9、PHP CLI、nginx、openssl、curl;当前用户可 sudo。
-安装器会自动:创建 venv 并锁定依赖(默认清华镜像)→ 创建 `mcp_agent` 用户(editor)+ 应用密码 → 生成回环自签证书 → 写入独立 nginx 块(127.0.0.1:8443)→ PHP 8.4 display_errors 加固 → 跑两套测试。
-
-常用参数:`--wp-root` `--php-socket` `--port` `--server-dir` `--mirror` `--regen-password` `--no-harden-php` `--skip-tests`(见 `install.sh -h`)
-
-### 2. 客户端侧(Windows)
+### 客户端侧(Windows)
 
 ```bat
 install.bat
-:: 或 powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -PiHost pi@mypi
 ```
 
-自动完成:连通性验证(服务器侧跑完整 MCP 协议测试)→ Claude Code 项目级 `.mcp.json`(或 `-ClaudeScope user` 走 `claude mcp add`)→ Codex `~/.codex/config.toml` 追加(带哨兵标记,幂等)。
+或:
 
-参数:`-PiHost` `-ServerDir` `-ClaudeScope project|user|skip` `-SkipCodex` `-Force` `-SkipVerify`
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -PiHost pi@mypi
+```
 
-完成后重启 Claude Code / Codex 会话,工具以 `wp_` 前缀出现。
+安装器先经 SSH 在服务器侧运行完整 MCP 协议测试以验证连通性,再向 Claude Code(项目级 `.mcp.json`)与 Codex(`~/.codex/config.toml`)写入配置;已有配置则跳过。
 
-## 工具清单(14 个)
+参数:`-PiHost`、`-ServerDir`、`-ClaudeScope project|user|skip`、`-SkipCodex`、`-Force`、`-SkipVerify`。
+
+## 工具
+
+共 14 个,前缀 `wp_`。
 
 | 类别 | 工具 |
-|---|---|
+| --- | --- |
 | 文章 | `wp_list_posts` `wp_get_post` `wp_create_post` `wp_update_post` `wp_delete_post` |
 | 页面 | `wp_list_pages` `wp_get_page` `wp_update_page` |
-| 分类/标签 | `wp_list_categories` `wp_list_tags` |
+| 分类与标签 | `wp_list_categories` `wp_list_tags` |
 | 媒体 | `wp_list_media` `wp_upload_media` |
 | 排版 | `markdown_to_html` `html_to_markdown` |
 
-附 `blog_writing_guide` prompt:向 Agent 注入写作排版约定(草稿先行、标题层级、中英文空格等)。
+另有 `blog_writing_guide` prompt,向 Agent 注入写作与排版约定。
 
-### 已知行为约定
+## 行为约定
 
-- **草稿无 slug**:WordPress 发布时才生成 slug,草稿请用 ID 查询
-- **草稿 + 显式 slug**:会触发 WP 7.1 核心告警(未定义属性),依赖第 8 步的 display_errors 加固隐藏,不影响功能
-- 分类/标签接受「名称或 ID」,不存在时报错;不自动新建分类
+- WordPress 对草稿不生成 slug,草稿以 ID 查询;slug 查询仅对已发布文章有效。
+- 为草稿显式指定 slug 会触发 WP 7.1 核心未定义属性告警,由 PHP 8.4 加固步骤隐藏,不影响功能。
+- 分类与标签参数接受名称或 ID;不存在时报错,不自动新建。
 
 ## 测试
 
-在服务器安装目录运行(非破坏:只建草稿并在结束前清理,永不发布):
-
 ```bash
-./venv/bin/python tests/test_wp_client.py      # 9 项真实站点 CRUD 冒烟
-./venv/bin/python tests/test_mcp_handshake.py  # MCP stdio 协议握手 + 工具调用
+./venv/bin/python tests/test_wp_client.py      # 真实站点 CRUD 冒烟,非破坏
+./venv/bin/python tests/test_mcp_handshake.py  # MCP stdio 协议握手与工具调用
 ```
 
 ## 卸载
 
 ```bash
 bash uninstall.sh --server-dir /home/pi/wordpress-mcp   # 保留 WP 用户
-bash uninstall.sh --with-wp-user                        # 连用户一起删
+bash uninstall.sh --with-wp-user                        # 同时删除用户
 ```
 
-客户端:Claude Code 删 `.mcp.json` 中条目(或 `claude mcp remove wordpress-blog`);Codex 删 `config.toml` 中 `[wordpress-mcp-plugin]` 标记块。
+客户端:删除 `.mcp.json` 中 `wordpress-blog` 条目(或 `claude mcp remove wordpress-blog`);删除 Codex `config.toml` 中 `[wordpress-mcp-plugin]` 标记块。
 
 ## 密钥轮换
 
@@ -105,16 +101,10 @@ bash uninstall.sh --with-wp-user                        # 连用户一起删
 
 ## 开发
 
-- 代码在 `wordpress_mcp/`;`deploy.sh` 幂等部署到服务器(开发迭代用,不写密钥)
-- 依赖锁定在 `requirements.txt`;`pyproject.toml` 提供打包元数据
-- CI:语法编译 + shellcheck + JSON 校验(见 `.github/workflows/ci.yml`)
-- 新增工具:在 `wp_client.py` 加客户端方法、在 `server.py` 加 `@mcp.tool()` 装饰的函数,同步更新两套测试的期望工具集
-
-## 路线图
-
-- 主题外观设置(Theme Mods)工具(需自建 WP 插件端点)
-- 评论管理、批量导入导出
-- 接入生图服务做配图工作流
+- `deploy.sh` 幂等部署到服务器(开发迭代用,不写密钥)。
+- 依赖锁定于 `requirements.txt`;`pyproject.toml` 为打包元数据。
+- CI 检查:Python 编译、shellcheck、JSON 校验。
+- 新增工具:在 `wp_client.py` 添加客户端方法,在 `server.py` 添加 `@mcp.tool()` 函数,并同步更新两套测试的工具集合断言。
 
 ## License
 

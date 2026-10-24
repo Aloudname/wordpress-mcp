@@ -1,11 +1,11 @@
-"""Typed HTTP client for the WordPress REST API (wp/v2).
+"""typed http client for the wordpress rest api (wp/v2).
 
-The client exposes only the subset of the REST API used by the MCP
-tools, with structured errors and explicit pagination. Requests run
-over the Pi's loopback interface using an Application Password.
+the client exposes only the subset of the rest api used by the mcp
+tools, with structured errors and explicit pagination. requests run
+over the pi's loopback interface using an application password.
 
-Note: uses a synchronous httpx client — local requests take
-milliseconds, and FastMCP runs sync tools in a worker thread, so this
+note: uses a synchronous httpx client. local requests take
+milliseconds, and fastmcp runs sync tools in a worker thread, so this
 does not block the event loop at this scale.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ from markdown import markdown
 
 from .config import load_config
 
-# 允许上传的媒体类型(白名单,博客常用)
+# upload whitelist for the blog's common media types
 _ALLOWED_MEDIA_EXT = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -37,13 +37,13 @@ _MD_EXTENSIONS = ["extra", "sane_lists"]
 
 
 class WordpressAPIError(RuntimeError):
-    """Raised when the WordPress API answers with an error."""
+    """raised when the wordpress api answers with an error."""
 
     def __init__(self, status: int, code: str, message: str) -> None:
         self.status = status
         self.code = code
         self.message = message
-        super().__init__(f"WordPress API {status} [{code}]: {message}")
+        super().__init__(f"wordpress api {status} [{code}]: {message}")
 
 
 class WordpressClient:
@@ -54,7 +54,7 @@ class WordpressClient:
             auth=(cfg["WP_USER"], cfg["WP_APP_PASSWORD"]),
             timeout=float(cfg["WP_TIMEOUT"]),
             verify=cfg["WP_VERIFY_SSL"].lower() == "true",
-            headers={"User-Agent": "wordpress-mcp/0.1"},
+            headers={"User-Agent": "wordpress-mcp/1.0"},
         )
 
     # ---- low level ---------------------------------------------------
@@ -66,7 +66,7 @@ class WordpressClient:
         return resp.json() if resp.content else None
 
     def _list_request(self, method: str, path: str, **kwargs: Any) -> tuple[Any, int | None]:
-        """Like _request, but also returns the X-WP-Total header."""
+        """like _request, but also returns the x-wp-total header."""
         resp = self._client.request(method, path, **kwargs)
         if resp.status_code >= 400:
             self._raise_for(resp)
@@ -88,8 +88,8 @@ class WordpressClient:
 
     @staticmethod
     def _clean(**kwargs: Any) -> dict[str, Any]:
-        """Drop None and empty-string values (an empty param would make
-        WP ignore the filter and return unfiltered results)."""
+        """drop none and empty-string values. an empty param would make
+        wp ignore the filter and return unfiltered results."""
         return {k: v for k, v in kwargs.items() if v not in (None, "")}
 
     def close(self) -> None:
@@ -109,10 +109,10 @@ class WordpressClient:
         ))
 
     def get_post(self, id_or_slug: str, *, format_: str = "markdown") -> dict:
-        """format_: 'markdown'(由渲染后的 HTML 转换)或 'html'(原始存储内容).
+        """format_: 'markdown' (converted from rendered html) or 'html' (raw stored content).
 
-        注意:slug 查询仅对已发布的文章有效 —— WordPress 对草稿不生成
-        slug(post_name 留空),草稿请用 id 查询。
+        slug lookup only works for published posts: wordpress does not
+        generate slugs for drafts, use the id for drafts.
         """
         ident = str(id_or_slug)
         if not ident:
@@ -120,7 +120,8 @@ class WordpressClient:
         if ident.isdigit():
             post = self._request("GET", f"/posts/{ident}", params={"context": "edit"})
         else:
-            # REST 列表默认只返回 publish,查 slug 需显式 status=any(覆盖草稿)
+            # the rest list endpoint defaults to status=publish, so slug
+            # lookup must pass status=any to cover drafts
             posts = self._request("GET", "/posts", params=self._clean(
                 slug=ident, context="edit", status="any"))
             if not posts:
@@ -255,7 +256,7 @@ class WordpressClient:
             )
         try:
             raw = base64.b64decode(base64_data, validate=True)
-        except Exception as exc:  # binascii.Error / ValueError
+        except Exception as exc:  # binascii.error / valueerror
             raise WordpressAPIError(400, "bad_base64", f"base64 解码失败: {exc}") from exc
         if not raw:
             raise WordpressAPIError(400, "empty_data", "媒体数据为空")

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Deploy wordpress-mcp source to the Pi and (re)install pinned deps.
-# 幂等:可重复执行。config.env(密钥)只在 Pi 上,从不部署/覆盖。
-# shellcheck disable=SC2029  # $REMOTE 等变量刻意在客户端(开发机)展开
+# deploy wordpress-mcp source to the pi and (re)install pinned deps.
+# idempotent. config.env (secrets) lives only on the pi, never deployed.
+# shellcheck disable=SC2029  # $REMOTE etc. intentionally expand on the dev machine
 set -eu
 
 PI_HOST="${PI_HOST:-pi@mypi}"

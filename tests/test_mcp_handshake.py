@@ -1,5 +1,5 @@
-"""Full MCP stdio protocol test: spawns the real server and drives it
-with the official SDK client (initialize -> list_tools -> call_tool).
+"""full mcp stdio protocol test: spawns the real server and drives it
+with the official sdk client (initialize -> list_tools -> call_tool).
 """
 from __future__ import annotations
 

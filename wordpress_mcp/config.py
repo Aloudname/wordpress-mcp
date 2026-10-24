@@ -1,8 +1,8 @@
-"""Runtime configuration for the WordPress MCP server.
+"""runtime configuration for the wordpress mcp server.
 
-Values are read from a KEY=VALUE env file in the project root
+values are read from a key=value env file in the project root
 (``config.env``, mode 0600, never deployed from the dev machine)
-and can be overridden by environment variables (``WP_*``).
+and can be overridden by environment variables (``wp_*``).
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ _DEFAULTS = {"WP_TIMEOUT": "15", "WP_VERIFY_SSL": "false"}
 
 
 class ConfigError(RuntimeError):
-    """Raised when required configuration is missing."""
+    """raised when required configuration is missing."""
 
 
 def _read_env_file() -> dict[str, str]:
@@ -34,7 +34,7 @@ def _read_env_file() -> dict[str, str]:
 
 
 def load_config() -> dict[str, str]:
-    """Merge defaults < env file < environment variables."""
+    """merge defaults < env file < environment variables."""
     merged = {
         **_DEFAULTS,
         **_read_env_file(),
@@ -44,6 +44,6 @@ def load_config() -> dict[str, str]:
     if missing:
         raise ConfigError(
             f"missing required config: {', '.join(missing)}. "
-            f"Fill {ENV_FILE} or set the corresponding environment variables."
+            f"fill {ENV_FILE} or set the corresponding environment variables."
         )
     return merged

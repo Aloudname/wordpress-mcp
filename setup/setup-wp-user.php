@@ -1,16 +1,17 @@
 <?php
 /**
- * 创建/复用 MCP 专用 WordPress 用户并签发应用密码。
+ * create (or reuse) the dedicated mcp wordpress user and issue an
+ * application password.
  *
- * 用法(在 WordPress 主机上,以能读 wp-load.php 的用户执行):
- *   php setup-wp-user.php <username> <app-name>
+ * usage (run on the wordpress host as a user that can read wp-load.php):
+ *   php setup-wp-user.php <username> <app-name> [wp-load.php path]
  *
- * 输出(供 install.sh 解析):
+ * output (parsed by install.sh):
  *   user_id=<id>
- *   app_password=<明文密码,仅本次可见>
+ *   app_password=<plaintext, shown once>
  *
- * 幂等:用户已存在则复用;每次运行都会新签一个应用密码
- * (旧密码可在 WP 后台「用户 -> 应用程序密码」撤销)。
+ * idempotent: an existing user is reused. every run issues a new app
+ * password (revoke old ones in wp admin -> users -> application passwords).
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -21,7 +22,8 @@ if (PHP_SAPI !== 'cli') {
 $username = $argv[1] ?? 'mcp_agent';
 $app_name = $argv[2] ?? 'wordpress-mcp';
 
-// 第三参数显式指定 wp-load.php(install.sh 会传),否则自动探测
+// argv[3] takes an explicit wp-load.php path (install.sh passes it);
+// fall back to auto-detection
 $wp_load = $argv[3] ?? null;
 if (!$wp_load || !is_file($wp_load)) {
     foreach ([__DIR__ . '/../../../wp-load.php', '/var/www/wordpress/wp-load.php'] as $candidate) {

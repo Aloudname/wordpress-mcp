@@ -14,12 +14,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Python 语法编译检查
+      - name: python compileall
         run: |
           python -m compileall -q wordpress_mcp tests setup
           python -m py_compile wordpress_mcp/*.py tests/*.py
 
-      - name: pyproject 校验
+      - name: validate pyproject
         run: python -c "import tomllib; tomllib.load(open('pyproject.toml', 'rb'))"
 
       - name: shellcheck
@@ -28,5 +28,5 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck install.sh uninstall.sh bin/mcp-server
 
-      - name: JSON 校验(.mcp.json 示例)
+      - name: validate json example
         run: python -c "import json; json.load(open('examples/wordpress-blog.mcp.json'))"

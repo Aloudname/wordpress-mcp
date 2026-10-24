@@ -1,33 +1,31 @@
 #!/bin/sh
-# =============================================================================
-# wordpress-mcp 一键安装(树莓派 / Debian 系)
+# wordpress-mcp installer for debian-based wordpress hosts (e.g. raspberry pi)
 #
-# 用法:
-#   从仓库运行:  bash install.sh [选项]
-#   管道安装:    curl -fsSL <raw-install.sh-url> | REPO_URL=https://github.com/you/wordpress-mcp bash
+# usage:
+#   from a checkout:  bash install.sh [options]
+#   piped:            curl -fsSL <raw-install.sh-url> | REPO_URL=https://github.com/you/wordpress-mcp bash
 #
-# 幂等:重复执行会跳过已完成的步骤。全程不修改 wp-config.php。
+# idempotent: rerunning skips completed steps. never touches wp-config.php.
 #
-# 选项:
-#   --wp-root DIR        WordPress 根目录(默认自动探测 /var/www)
-#   --php-socket SOCK    PHP-FPM 套接字(默认自动探测)
-#   --port PORT          回环 HTTPS 端口(默认 8443)
-#   --server-dir DIR     安装目录(默认 /home/pi/wordpress-mcp)
-#   --mirror URL         pip 镜像(默认清华源)
-#   --regen-password     强制重新签发应用密码
-#   --no-harden-php      跳过 display_errors 加固(PHP 8.4 下会导致 JSON 被警告污染)
-#   --skip-tests         跳过安装后的测试
-#   --repo URL           管道安装时的仓库地址(或环境变量 REPO_URL)
-#   --ref BRANCH         管道安装时的分支/标签(默认 main)
-#   -h, --help           帮助
-# =============================================================================
+# options:
+#   --wp-root DIR        wordpress root (default: auto-detect under /var/www)
+#   --php-socket SOCK    php-fpm socket (default: auto-detect)
+#   --port PORT          loopback https port (default 8443)
+#   --server-dir DIR     install dir (default /home/pi/wordpress-mcp)
+#   --mirror URL         pip mirror (default tsinghua)
+#   --regen-password     force a new application password
+#   --no-harden-php      skip display_errors hardening (php 8.4: warnings pollute json)
+#   --skip-tests         skip post-install tests
+#   --repo URL           repo url for piped install (or env REPO_URL)
+#   --ref BRANCH         branch/tag for piped install (default main)
+#   -h, --help           show help
 set -eu
 
-# SSH 非交互 shell 的 PATH 可能不含 /usr/sbin(nginx 等)
+# non-interactive ssh shells may lack /usr/sbin in path (nginx lives there)
 PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 export PATH
 
-# ---- 默认值 ---------------------------------------------------------------
+# --- defaults ---
 SERVER_DIR="/home/pi/wordpress-mcp"
 WP_ROOT=""
 PHP_SOCKET=""
@@ -40,7 +38,7 @@ REGEN_PASSWORD=0
 SKIP_TESTS=0
 REPO_URL="${REPO_URL:-}"
 REF="main"
-# shellcheck disable=SC1007  # CDPATH= 前缀是 POSIX 安全的 cd 惯用法,空格为刻意
+# shellcheck disable=SC1007  # CDPATH= prefix is the posix-safe cd idiom; the space is intentional
 SRC_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 LOG="/tmp/wordpress-mcp-install.log"
 : > "$LOG"
@@ -53,11 +51,11 @@ SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"
 
 usage() {
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
 }
 
-# ---- 参数解析 -------------------------------------------------------------
+# --- parse args ---
 while [ $# -gt 0 ]; do
     case "$1" in
         --wp-root)       WP_ROOT="$2"; shift 2 ;;
@@ -75,7 +73,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# ---- 0. 环境检查 ----------------------------------------------------------
+# --- 0. check environment ---
 step "检查环境"
 command -v python3 >/dev/null 2>&1 || fail "缺少 python3"
 command -v php    >/dev/null 2>&1 || fail "缺少 php CLI"
@@ -88,7 +86,7 @@ PY_MINOR=$(python3 -c 'import sys; print(sys.version_info[1])')
 { [ "$PY_MAJOR" -ge 3 ] && [ "$PY_MINOR" -ge 9 ]; } || fail "需要 Python >= 3.9(当前 $PY_MAJOR.$PY_MINOR)"
 log "Python $PY_MAJOR.$PY_MINOR OK"
 
-# ---- 1. 获取源码 ----------------------------------------------------------
+# --- 1. fetch source ---
 step "获取源码"
 if [ ! -f "$SRC_DIR/wordpress_mcp/server.py" ]; then
     [ -n "$REPO_URL" ] || fail "本地未找到源码。管道安装请设置 REPO_URL=https://github.com/<you>/<repo>"
@@ -105,7 +103,7 @@ fi
 [ -f "$SRC_DIR/wordpress_mcp/server.py" ] || fail "源码不完整:缺少 wordpress_mcp/server.py"
 log "源码: $SRC_DIR"
 
-# ---- 2. 部署到安装目录 ----------------------------------------------------
+# --- 2. deploy to server dir ---
 step "部署源码到 $SERVER_DIR"
 $SUDO mkdir -p "$SERVER_DIR/wordpress_mcp" "$SERVER_DIR/bin" "$SERVER_DIR/tests" "$SERVER_DIR/setup"
 for f in "$SRC_DIR"/wordpress_mcp/*.py; do $SUDO cp "$f" "$SERVER_DIR/wordpress_mcp/"; done
@@ -116,7 +114,7 @@ $SUDO cp "$SRC_DIR/setup/"* "$SERVER_DIR/setup/"
 $SUDO cp "$SRC_DIR/requirements.txt" "$SRC_DIR/pyproject.toml" "$SRC_DIR/README.md" "$SERVER_DIR/"
 log "已复制(覆盖)到 $SERVER_DIR"
 
-# ---- 3. 探测 WordPress 与 PHP-FPM -----------------------------------------
+# --- 3. detect wordpress and php-fpm ---
 step "探测 WordPress 与 PHP-FPM"
 if [ -z "$WP_ROOT" ]; then
     WP_ROOT=$(find /var/www -maxdepth 3 -name wp-load.php 2>/dev/null | head -1 | sed 's|/wp-load.php||')
@@ -133,7 +131,7 @@ fi
 [ -n "$PHP_SOCKET" ] || fail "未找到 PHP-FPM 套接字,请用 --php-socket 指定"
 log "PHP-FPM 套接字: $PHP_SOCKET"
 
-# ---- 4. 创建 venv 并安装依赖 ----------------------------------------------
+# --- 4. venv and dependencies ---
 step "Python 虚拟环境与依赖"
 if [ ! -x "$SERVER_DIR/venv/bin/python" ]; then
     python3 -m venv "$SERVER_DIR/venv" 2>/dev/null \
@@ -145,7 +143,7 @@ if ! "$SERVER_DIR/venv/bin/python" -c "import mcp, httpx, markdownify, markdown"
 fi
 log "依赖就绪(mcp/httpx/markdownify/markdown 已锁定版本)"
 
-# ---- 5. 创建/复用 WordPress 用户并签发应用密码 ------------------------------
+# --- 5. wordpress user and application password ---
 step "WordPress 专用用户与应用密码"
 if [ -f "$SERVER_DIR/config.env" ] && [ "$REGEN_PASSWORD" = "0" ]; then
     log "config.env 已存在,跳过(如需重新签发: --regen-password)"
@@ -165,7 +163,7 @@ else
     log "config.env 已写入(0600)。旧应用密码可在 WP 后台撤销"
 fi
 
-# ---- 6. 回环 TLS 证书 ------------------------------------------------------
+# --- 6. loopback tls certificate ---
 step "回环 TLS 证书(自签名)"
 if [ -f /etc/nginx/ssl/loopback.crt ] && [ -f /etc/nginx/ssl/loopback.key ]; then
     log "证书已存在,跳过"
@@ -178,7 +176,7 @@ else
     log "已生成 /etc/nginx/ssl/loopback.{crt,key}(有效期 10 年)"
 fi
 
-# ---- 7. nginx 回环块 --------------------------------------------------------
+# --- 7. nginx loopback site block ---
 step "nginx 回环入口(独立、无缓存)"
 NGX_CONF="/etc/nginx/sites-available/wordpress-mcp-loopback.conf"
 if [ -f "$NGX_CONF" ]; then
@@ -195,7 +193,7 @@ $SUDO nginx -t >/dev/null 2>&1 || fail "nginx 配置校验失败,请检查 $NGX_
 $SUDO systemctl reload nginx
 log "nginx 已启用 $NGX_CONF(仅监听 127.0.0.1:$PORT)"
 
-# ---- 8. PHP 8.4 display_errors 加固 ---------------------------------------
+# --- 8. php 8.4 display_errors hardening ---
 if [ "$HARDEN_PHP" = "1" ]; then
     step "PHP display_errors 加固(PHP 8.4 下 ini 文件赋值失效)"
     if grep -q "php_admin_value\[display_errors\]" /etc/php/*/fpm/pool.d/*.conf 2>/dev/null; then
@@ -203,7 +201,7 @@ if [ "$HARDEN_PHP" = "1" ]; then
     else
         POOL_FILE=$(grep -l "listen *= *$PHP_SOCKET" /etc/php/*/fpm/pool.d/*.conf 2>/dev/null | head -1)
         if [ -n "$POOL_FILE" ]; then
-            printf '\n; [wordpress-mcp] PHP 8.4 下 php.ini 的 display_errors 赋值被忽略,池级覆盖才生效\nphp_admin_value[display_errors] = 0\n' \
+            printf '\n; [wordpress-mcp] php 8.4 ignores php.ini display_errors; pool-level override takes effect\nphp_admin_value[display_errors] = 0\n' \
                 | $SUDO tee -a "$POOL_FILE" >/dev/null
             FPM_SVC=$(systemctl list-units 'php*-fpm.service' --no-pager --no-legend 2>/dev/null | awk '{print $1}' | head -1)
             [ -n "$FPM_SVC" ] && $SUDO systemctl restart "$FPM_SVC"
@@ -214,7 +212,7 @@ if [ "$HARDEN_PHP" = "1" ]; then
     fi
 fi
 
-# ---- 9. 测试 ---------------------------------------------------------------
+# --- 9. tests ---
 if [ "$SKIP_TESTS" = "1" ]; then
     step "已跳过测试(--skip-tests)"
 else
@@ -224,10 +222,10 @@ else
     ./venv/bin/python tests/test_mcp_handshake.py || fail "MCP 协议测试失败,详见上方输出"
 fi
 
-# ---- 完成 -----------------------------------------------------------------
+# --- done ---
 log ""
 log "======================================================"
-log " wordpress-mcp 安装完成 ✓"
+log " wordpress-mcp 安装完成"
 log " 服务器: $SERVER_DIR"
 log " 回环入口: https://127.0.0.1:$PORT(仅本机,无缓存)"
 log " 日志: $LOG"

@@ -1,4 +1,4 @@
-# 跨平台行尾锁定:Linux 侧脚本必须 LF,Windows 脚本用 CRLF
+# lock line endings across platforms: linux-side scripts must be lf, windows scripts crlf
 * text=auto
 *.sh   text eol=lf
 *.py   text eol=lf

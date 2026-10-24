@@ -1,22 +1,23 @@
-﻿# =============================================================================
-# wordpress-mcp Windows 客户端接入(Claude Code + Codex)
+﻿
+# wordpress-mcp windows client setup (claude code + codex)
 #
-# 用法:
+# usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -PiHost pi@mypi -ClaudeScope user
 #
-# 幂等:已存在的配置会跳过(-Force 覆盖)。写文件用 UTF-8 无 BOM。
+# idempotent: existing configs are skipped (-Force overwrites). files are
+# written as utf-8 without bom.
 #
-# 参数:
-#   -PiHost        SSH 目标(默认 pi@mypi)
-#   -ServerDir     服务器上的安装目录(默认 /home/pi/wordpress-mcp)
-#   -ProjectDir    Claude Code 项目目录(默认当前目录,仅 -ClaudeScope project 时用)
-#   -ClaudeScope   project(默认,写入 <ProjectDir>\.mcp.json)|user(调用 claude mcp add)|skip
-#   -SkipCodex     不修改 Codex 配置
-#   -Force         覆盖已有配置
-#   -SkipVerify    跳过连通性验证
-#   -Help          帮助
-# =============================================================================
+# params:
+#   -PiHost        ssh target (default pi@mypi)
+#   -ServerDir     server-side install dir (default /home/pi/wordpress-mcp)
+#   -ProjectDir    claude code project dir (default cwd, used with -ClaudeScope project)
+#   -ClaudeScope   project (default, writes <ProjectDir>\.mcp.json) | user (runs claude mcp add) | skip
+#   -SkipCodex     do not touch the codex config
+#   -Force         overwrite existing configs
+#   -SkipVerify    skip the connectivity check
+#   -Help          show help
+
 [CmdletBinding()]
 param(
     [string]$PiHost = "pi@mypi",
@@ -41,7 +42,7 @@ if ($Help) {
     exit 0
 }
 
-# ---- 0. 前置检查 ----------------------------------------------------------
+# --- 0. prerequisites ---
 $sshExe = "$env:WINDIR\System32\OpenSSH\ssh.exe"
 if (-not (Test-Path $sshExe)) {
     $sshExe = (Get-Command ssh -ErrorAction SilentlyContinue).Source
@@ -64,7 +65,7 @@ if (-not $SkipVerify) {
 
 $entryArgs = @("-o", "BatchMode=yes", "-q", $PiHost, "$ServerDir/bin/mcp-server")
 
-# ---- 1. Claude Code --------------------------------------------------------
+# --- 1. claude code ---
 if ($ClaudeScope -ne "skip") {
     if ($ClaudeScope -eq "user") {
         Write-Step "Claude Code(user 级): 调用 claude mcp add"
@@ -111,12 +112,12 @@ if ($ClaudeScope -ne "skip") {
     }
 }
 
-# ---- 2. Codex --------------------------------------------------------------
+# --- 2. codex ---
 if (-not $SkipCodex) {
     Write-Step "Codex: ~/.codex/config.toml"
     $codexCfg = Join-Path $env:USERPROFILE ".codex\config.toml"
     $block = @"
-# [wordpress-mcp-plugin] 以下由 install.ps1 管理,勿手改(卸载/更新请重跑本脚本)
+# [wordpress-mcp-plugin] managed by install.ps1, do not edit
 [mcp_servers.wordpress-blog]
 command = '$sshExe'
 args = ["-o", "BatchMode=yes", "-q", "$PiHost", "$ServerDir/bin/mcp-server"]

@@ -1,4 +1,4 @@
-"""Entry point: python -m wordpress_mcp (stdio transport)."""
+"""entry point: python -m wordpress_mcp (stdio transport)."""
 
 from .server import mcp
 
