@@ -6,18 +6,7 @@
 
 ## 架构
 
-```
-Claude Code / Codex (Windows)
-  stdio JSON-RPC over SSH
-  ↓
-WordPress 主机(如树莓派)/home/pi/wordpress-mcp
-  按需进程:venv/bin/python -m wordpress_mcp
-  ↓
-https://127.0.0.1:8443(nginx 回环自签 TLS,独立站点块,无缓存)
-  Basic Auth:专用用户 mcp_agent(editor 角色)的应用密码
-  ↓
-WordPress REST API(wp/v2)
-```
+![架构](docs/architecture.svg)
 
 ## 安全模型
 
