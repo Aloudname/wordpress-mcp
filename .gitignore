@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 密钥与环境(绝不入库)
+config.env
+.env
+
+# 本地日志
+*.log
+
+# 客户端项目配置(由 install.ps1 生成)
+.mcp.json

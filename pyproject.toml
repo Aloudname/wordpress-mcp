@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wordpress-mcp"
+version = "1.0.0"
+description = "MCP server exposing WordPress blog editing tools (posts/pages/media/markdown) over stdio"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "mcp>=2.0,<3",
+    "httpx>=0.27,<1",
+    "markdownify>=1.0,<2",
+    "Markdown>=3.5,<4",
+]
+
+[project.scripts]
+wordpress-mcp = "wordpress_mcp.__main__:main"
+
+[tool.setuptools]
+packages = ["wordpress_mcp"]

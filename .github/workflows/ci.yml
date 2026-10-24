@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python 语法编译检查
+        run: |
+          python -m compileall -q wordpress_mcp tests setup
+          python -m py_compile wordpress_mcp/*.py tests/*.py
+
+      - name: pyproject 校验
+        run: python -c "import tomllib; tomllib.load(open('pyproject.toml', 'rb'))"
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck install.sh uninstall.sh bin/mcp-server
+
+      - name: JSON 校验(.mcp.json 示例)
+        run: python -c "import json; json.load(open('examples/wordpress-blog.mcp.json'))"

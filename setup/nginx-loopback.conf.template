@@ -1,0 +1,24 @@
+# [wordpress-mcp] 本文件由 install.sh 根据模板生成,uninstall.sh 会整文件删除,勿手改
+# MCP 专用回环入口:仅监听 127.0.0.1,HTTPS + 应用密码认证
+# 刻意不启用任何缓存 —— MCP 编辑工具必须读到最新内容
+server {
+    listen 127.0.0.1:{{PORT}} ssl;
+    ssl_certificate /etc/nginx/ssl/loopback.crt;
+    ssl_certificate_key /etc/nginx/ssl/loopback.key;
+    server_name _;
+    root {{WP_ROOT}};
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_param HTTP_AUTHORIZATION $http_authorization;
+        fastcgi_pass unix:{{PHP_SOCKET}};
+    }
+
+    location ~* /wp-config.php { deny all; }
+    client_max_body_size 50M;
+}

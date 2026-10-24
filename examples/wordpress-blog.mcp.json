@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "wordpress-blog": {
+      "type": "stdio",
+      "command": "ssh",
+      "args": [
+        "-o",
+        "BatchMode=yes",
+        "-q",
+        "pi@mypi",
+        "/home/pi/wordpress-mcp/bin/mcp-server"
+      ]
+    }
+  }
+}
