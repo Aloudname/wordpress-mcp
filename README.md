@@ -33,7 +33,7 @@ WordPress REST API(wp/v2)
 ### 1. 服务器侧(WordPress 主机,Debian 系)
 
 ```bash
-git clone https://github.com/<你>/wordpress-mcp.git
+git clone https://github.com/Aloudname/wordpress-mcp.git
 cd wordpress-mcp
 bash install.sh          # 幂等;自动探测 WordPress 与 PHP-FPM
 ```
@@ -42,7 +42,7 @@ bash install.sh          # 幂等;自动探测 WordPress 与 PHP-FPM
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<你>/wordpress-mcp/main/install.sh \
-  | REPO_URL=https://github.com/<你>/wordpress-mcp bash
+  | REPO_URL=https://github.com/Aloudname/wordpress-mcp bash
 ```
 
 前置要求:Python ≥ 3.9、PHP CLI、nginx、openssl、curl;当前用户可 sudo。
