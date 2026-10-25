@@ -112,7 +112,7 @@ if ($ServerDir -notmatch '^/[A-Za-z0-9._/-]+$' -or $ServerDir.StartsWith('//') -
 
 Write-Host "目标: ${SshHost}:$ServerDir"
 
-# 0. prerequisites
+# pre-requirements
 $sshExe = "$env:WINDIR\System32\OpenSSH\ssh.exe"
 if (-not (Test-Path $sshExe)) {
     $sshExe = (Get-Command ssh -ErrorAction SilentlyContinue).Source
@@ -135,7 +135,7 @@ if (-not $SkipVerify) {
 
 $entryArgs = @("-o", "BatchMode=yes", "-q", $SshHost, "$ServerDir/bin/mcp-server")
 
-# 1. claude code
+# claude code
 if ($ClaudeScope -ne "skip") {
     if ($ClaudeScope -eq "user") {
         Write-Step "Claude Code(user 级): 调用 claude mcp add"
@@ -182,7 +182,7 @@ if ($ClaudeScope -ne "skip") {
     }
 }
 
-# 2. codex
+# codex
 if (-not $SkipCodex) {
     Write-Step "Codex: ~/.codex/config.toml"
     $codexCfg = Join-Path $env:USERPROFILE ".codex\config.toml"
