@@ -110,7 +110,7 @@ if ($ServerDir -notmatch '^/[A-Za-z0-9._/-]+$' -or $ServerDir.StartsWith('//') -
     exit 1
 }
 
-Write-Host "目标: $SshHost:$ServerDir"
+Write-Host "目标: ${SshHost}:$ServerDir"
 
 # 0. prerequisites
 $sshExe = "$env:WINDIR\System32\OpenSSH\ssh.exe"
