@@ -7,7 +7,7 @@ name = "wordpress-mcp"
 version = "1.0.0"
 description = "MCP server exposing WordPress blog editing tools (posts/pages/media/markdown) over stdio"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "mcp>=2.0,<3",
@@ -16,8 +16,15 @@ dependencies = [
     "Markdown>=3.5,<4",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
 [project.scripts]
 wordpress-mcp = "wordpress_mcp.__main__:main"
 
 [tool.setuptools]
 packages = ["wordpress_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["."]

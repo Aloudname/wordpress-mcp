@@ -10,8 +10,9 @@
  *   user_id=<id>
  *   app_password=<plaintext, shown once>
  *
- * idempotent: an existing user is reused. every run issues a new app
- * password (revoke old ones in wp admin -> users -> application passwords).
+ * idempotent: an existing user is reused only if it already has the
+ * editor role. every run issues a new app password (revoke old ones in
+ * wp admin -> users -> application passwords).
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -47,6 +48,13 @@ if (!$user) {
     $u->set_role('editor');
     echo 'user_id=' . $uid . PHP_EOL;
 } else {
+    $roles = (array) $user->roles;
+    if (!in_array('editor', $roles, true) || in_array('administrator', $roles, true)) {
+        fwrite(STDERR, "用户 {$username} 已存在,但角色不是 editor(当前: "
+            . (implode(',', $roles) ?: 'none')
+            . ")。请手动调整角色或改用其他用户名。\n");
+        exit(1);
+    }
     $uid = $user->ID;
     echo 'user_id=' . $uid . PHP_EOL;
 }

@@ -1,32 +1,62 @@
 #!/bin/sh
 # wordpress-mcp uninstaller
 #
-# usage: bash uninstall.sh [options]
-#   removes by default: the nginx loopback block, the tls certificate,
-#   the php hardening line, and the install dir.
-#   keeps by default: the wordpress user and its application passwords
-#   (pass --with-wp-user to delete them too).
+# removes by default: the nginx loopback block, the tls certificate,
+# the php hardening line, and the install dir.
+# keeps by default: the wordpress user and its application passwords
+# (pass --with-wp-user to delete them too).
 #
-# options:
-#   --server-dir DIR     install dir (default /home/pi/wordpress-mcp)
-#   --wp-root DIR        wordpress root (needed only with --with-wp-user, default: auto-detect)
-#   --keep-hardening     keep the php display_errors hardening line
-#   --with-wp-user       also delete the wordpress user and all its app passwords
-#   --no-reload          do not reload nginx / restart fpm
-#   -h, --help           show help
+# config precedence: --server-dir > MCP_SERVER_DIR > .env > $HOME/wordpress-mcp.
 set -eu
 
-SERVER_DIR="/home/pi/wordpress-mcp"
+# shellcheck disable=SC1007  # CDPATH= prefix is the posix-safe cd idiom; the space is intentional
+SRC_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ENV_FILE="$SRC_DIR/.env"
+ENV_SERVER_DIR=""
+
+if [ -f "$ENV_FILE" ]; then
+    while IFS='=' read -r key value || [ -n "$key" ]; do
+        key=$(printf '%s' "$key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        case "$key" in
+            MCP_SERVER_DIR)
+                value=$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+                case "$value" in
+                    \"*\") value=${value#\"}; value=${value%\"} ;;
+                    \'*\') value=${value#\'}; value=${value%\'} ;;
+                esac
+                ENV_SERVER_DIR=$value
+                ;;
+        esac
+    done < "$ENV_FILE"
+fi
+
+SERVER_DIR="${MCP_SERVER_DIR:-${ENV_SERVER_DIR:-$HOME/wordpress-mcp}}"
 WP_ROOT=""
 KEEP_HARDENING=0
 WITH_WP_USER=0
 NO_RELOAD=0
+FORCE=0
 
 SUDO=""
 [ "$(id -u)" = "0" ] || SUDO="sudo"
 
+fail() { echo "错误: $*" >&2; exit 1; }
+
 usage() {
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    cat <<'EOF'
+usage: bash uninstall.sh [options]
+
+options:
+  --server-dir DIR     install dir (default: $HOME/wordpress-mcp)
+  --wp-root DIR        wordpress root (needed only with --with-wp-user, default: auto-detect)
+  --keep-hardening     keep the php display_errors hardening line
+  --with-wp-user       also delete the wordpress user and all its app passwords
+  --no-reload          do not reload nginx / restart fpm
+  --force              remove --server-dir even if it lacks install markers
+  -h, --help           show help
+
+config precedence: --server-dir > MCP_SERVER_DIR > .env > $HOME/wordpress-mcp
+EOF
     exit 0
 }
 
@@ -37,10 +67,30 @@ while [ $# -gt 0 ]; do
         --keep-hardening) KEEP_HARDENING=1; shift ;;
         --with-wp-user)  WITH_WP_USER=1; shift ;;
         --no-reload)     NO_RELOAD=1; shift ;;
+        --force)         FORCE=1; shift ;;
         -h|--help)       usage ;;
-        *)               echo "未知参数: $1(见 -h)" >&2; exit 1 ;;
+        *)               fail "未知参数: $1(见 -h)" ;;
     esac
 done
+
+# validate config before touching anything
+SERVER_DIR=${SERVER_DIR%/}
+case "$SERVER_DIR" in
+    ""|/)            fail "安装目录不能是根目录" ;;
+    /*)              ;;
+    *)               fail "安装目录必须是绝对路径: $SERVER_DIR" ;;
+esac
+case "$SERVER_DIR" in
+    */../*|*/..)     fail "安装目录不能包含 '..': $SERVER_DIR" ;;
+    *[[:space:]]*)   fail "安装目录不能包含空白字符: $SERVER_DIR" ;;
+esac
+if printf '%s' "$SERVER_DIR" | grep -q '[^A-Za-z0-9._/-]'; then
+    fail "安装目录包含不支持的字符(仅允许字母、数字、. _ / -): $SERVER_DIR"
+fi
+if [ -d "$SERVER_DIR" ] && [ "$FORCE" = "0" ] \
+   && [ ! -e "$SERVER_DIR/bin/mcp-server" ] && [ ! -e "$SERVER_DIR/config.env" ]; then
+    fail "目录中未找到 wordpress-mcp 安装痕迹(缺 bin/mcp-server 与 config.env): $SERVER_DIR。确认后可用 --force"
+fi
 
 echo "将移除以下内容:"
 echo "  - nginx 回环块 wordpress-mcp-loopback.conf 及其启用链接"
@@ -97,8 +147,12 @@ PHPEOF
 fi
 
 # 5. install dir
-$SUDO rm -rf "$SERVER_DIR"
-echo "[ok] 安装目录已移除: $SERVER_DIR"
+if [ -d "$SERVER_DIR" ]; then
+    $SUDO rm -rf -- "$SERVER_DIR"
+    echo "[ok] 安装目录已移除: $SERVER_DIR"
+else
+    echo "[跳过] 安装目录不存在: $SERVER_DIR"
+fi
 
 echo ""
 echo "卸载完成。客户端(Windows)上的 MCP 配置如需移除:"

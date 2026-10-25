@@ -35,65 +35,82 @@ def check(label: str, condition: bool, detail: str = "") -> None:
 def main() -> int:
     c = WordpressClient()
     stamp = time.strftime("%Y%m%d-%H%M%S")
+    pid = None
+    media_id = None
+    try:
+        # 0. remove leftovers from previous runs (any status)
+        leftovers, _ = c.list_posts(status="any", search="__mcp_smoke_", per_page=100)
+        for p in leftovers:
+            c.delete_post(p["id"], trash=False)
+        if leftovers:
+            print(f"[ok] 清理历史残留 {len(leftovers)} 篇")
 
-    # 0. remove leftovers from previous runs (any status)
-    leftovers, _ = c.list_posts(status="any", search="__mcp_smoke_", per_page=100)
-    for p in leftovers:
-        c.delete_post(p["id"], trash=False)
-    if leftovers:
-        print(f"[ok] 清理历史残留 {len(leftovers)} 篇")
+        # 1. read-only listings
+        cats, ctotal = c.list_categories()
+        tags, ttotal = c.list_tags()
+        media, mtotal = c.list_media(per_page=1)
+        check("list_categories/list_tags/list_media",
+              isinstance(cats, list) and isinstance(tags, list) and isinstance(media, list),
+              f"categories={ctotal} tags={ttotal} media={mtotal}")
 
-    # 1. read-only listings
-    cats, ctotal = c.list_categories()
-    tags, ttotal = c.list_tags()
-    media, mtotal = c.list_media(per_page=1)
-    check("list_categories/list_tags/list_media",
-          isinstance(cats, list) and isinstance(tags, list) and isinstance(media, list),
-          f"categories={ctotal} tags={ttotal} media={mtotal}")
+        # 2. markdown <-> html roundtrip
+        html = c.md_to_html("# 测试标题\n\n**加粗** 和 *斜体*\n\n- 列表项")
+        md = c.html_to_md(html)
+        check("markdown <-> html roundtrip",
+              "测试标题" in md and "加粗" in md, repr(md[:80]))
 
-    # 2. markdown <-> html roundtrip
-    html = c.md_to_html("# 测试标题\n\n**加粗** 和 *斜体*\n\n- 列表项")
-    md = c.html_to_md(html)
-    check("markdown <-> html roundtrip",
-          "测试标题" in md and "加粗" in md, repr(md[:80]))
+        # 3. draft lifecycle: create -> update -> read by id/slug -> trash -> purge
+        # wp does not generate slugs for drafts, so pass an explicit slug
+        slug = f"__mcp_smoke_{stamp}"
+        post = c.create_post(title=slug, content=html, status="draft", slug=slug)
+        pid = post["id"]
+        check("create_post 返回 draft", post["status"] == "draft", f"id={pid}")
 
-    # 3. draft lifecycle: create -> update -> read by id/slug -> trash -> purge
-    # wp does not generate slugs for drafts, so pass an explicit slug
-    slug = f"__mcp_smoke_{stamp}"
-    post = c.create_post(title=slug, content=html, status="draft", slug=slug)
-    pid = post["id"]
-    check("create_post 返回 draft", post["status"] == "draft", f"id={pid}")
+        updated = c.update_post(pid, content=c.md_to_html("**更新后的内容**"))
+        check("update_post 生效", "更新后的内容" in updated["content"]["raw"])
 
-    updated = c.update_post(pid, content=c.md_to_html("**更新后的内容**"))
-    check("update_post 生效", "更新后的内容" in updated["content"]["raw"])
+        got_md = c.get_post(str(pid), format_="markdown")
+        got_html = c.get_post(str(pid), format_="html")
+        check("get_post 按 id 读取(markdown/html)",
+              "更新后的内容" in got_md["content"] and "更新后的内容" in got_html["content"])
 
-    got_md = c.get_post(str(pid), format_="markdown")
-    got_html = c.get_post(str(pid), format_="html")
-    check("get_post 按 id 读取(markdown/html)",
-          "更新后的内容" in got_md["content"] and "更新后的内容" in got_html["content"])
+        got_slug = c.get_post(post["slug"], format_="html")
+        check("get_post 按 slug 读取", got_slug["id"] == pid)
 
-    got_slug = c.get_post(post["slug"], format_="html")
-    check("get_post 按 slug 读取", got_slug["id"] == pid)
+        trashed = c.delete_post(pid, trash=True)
+        check("delete_post 移入回收站", trashed["status"] == "trash")
+        c.delete_post(pid, trash=False)  # purge test residue
+        pid = None
 
-    trashed = c.delete_post(pid, trash=True)
-    check("delete_post 移入回收站", trashed["status"] == "trash")
-    c.delete_post(pid, trash=False)  # purge test residue
+        # 4. media upload -> delete
+        item = c.upload_media(filename=f"smoke-{stamp}.png",
+                              base64_data=base64.b64encode(_PNG_1PX).decode(),
+                              alt_text="smoke test image")
+        media_id = item["id"]
+        check("upload_media", media_id > 0 and "source_url" in item, item.get("source_url", ""))
+        c.delete_media(media_id)
+        media_id = None
 
-    # 4. media upload -> delete
-    item = c.upload_media(filename=f"smoke-{stamp}.png",
-                          base64_data=base64.b64encode(_PNG_1PX).decode(),
-                          alt_text="smoke test image")
-    check("upload_media", item["id"] > 0 and "source_url" in item, item.get("source_url", ""))
-    c.delete_media(item["id"])
+        # 5. category name/id resolution
+        name = cats[0]["name"]
+        ids = c.resolve_category_ids([name, cats[0]["id"]])
+        check("resolve_category_ids 名称+ID", len(ids) == 2 and ids[0] == ids[1], repr(name))
 
-    # 5. category name/id resolution
-    name = cats[0]["name"]
-    ids = c.resolve_category_ids([name, cats[0]["id"]])
-    check("resolve_category_ids 名称+ID", len(ids) == 2 and ids[0] == ids[1], repr(name))
-
-    c.close()
-    print(f"\nALL {_PASSED} CHECKS PASSED")
-    return 0
+        print(f"\nALL {_PASSED} CHECKS PASSED")
+        return 0
+    finally:
+        # never leave drafts/media behind when a check fails mid-test
+        if media_id is not None:
+            try:
+                c.delete_media(media_id)
+            except Exception:
+                pass
+        if pid is not None:
+            try:
+                c.delete_post(pid, trash=False)
+            except Exception:
+                pass
+        c.close()
 
 
 if __name__ == "__main__":

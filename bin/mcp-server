@@ -1,6 +1,6 @@
 #!/bin/sh
 # mcp stdio entry point, invoked by clients over ssh:
-#   ssh pi@mypi /home/pi/wordpress-mcp/bin/mcp-server
+#   ssh user@host /home/user/wordpress-mcp/bin/mcp-server
 set -eu
 # shellcheck disable=SC1007  # CDPATH= prefix is the posix-safe cd idiom; the space is intentional
 DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"

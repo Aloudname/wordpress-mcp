@@ -1,33 +1,24 @@
-﻿
-# wordpress-mcp windows client setup (claude code + codex)
+﻿# wordpress-mcp windows client setup (claude code + codex)
 #
-# usage:
+# copy .env.example to .env and fill MCP_SSH_HOST / MCP_SERVER_DIR, then:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
-#   powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -PiHost pi@mypi -ClaudeScope user
 #
+# config precedence: parameters > environment variables > .env next to this script.
 # idempotent: existing configs are skipped (-Force overwrites). files are
 # written as utf-8 without bom.
-#
-# params:
-#   -PiHost        ssh target (default pi@mypi)
-#   -ServerDir     server-side install dir (default /home/pi/wordpress-mcp)
-#   -ProjectDir    claude code project dir (default cwd, used with -ClaudeScope project)
-#   -ClaudeScope   project (default, writes <ProjectDir>\.mcp.json) | user (runs claude mcp add) | skip
-#   -SkipCodex     do not touch the codex config
-#   -Force         overwrite existing configs
-#   -SkipVerify    skip the connectivity check
-#   -Help          show help
 
 [CmdletBinding()]
 param(
-    [string]$PiHost = "pi@mypi",
-    [string]$ServerDir = "/home/pi/wordpress-mcp",
+    [Alias("PiHost")]
+    [string]$SshHost = "",
+    [string]$ServerDir = "",
     [string]$ProjectDir = "",
     [ValidateSet("project", "user", "skip")]
     [string]$ClaudeScope = "project",
     [switch]$SkipCodex,
     [switch]$Force,
     [switch]$SkipVerify,
+    [string]$EnvFile = "",
     [switch]$Help
 )
 
@@ -38,11 +29,90 @@ function Write-Step([string]$Msg) { Write-Host "==> $Msg" }
 function Write-Err([string]$Msg) { Write-Host "错误: $Msg" -ForegroundColor Red }
 
 if ($Help) {
-    Get-Help -Detailed $MyInvocation.MyCommand.Path
+    @'
+usage: install.ps1 [-SshHost USER@HOST] [-ServerDir DIR] [options]
+
+config precedence: parameters > environment variables > .env
+
+  -SshHost USER@HOST   ssh target (alias -PiHost; env MCP_SSH_HOST)
+  -ServerDir DIR       absolute install dir on the server (env MCP_SERVER_DIR)
+  -EnvFile PATH        env file (default: .env next to this script)
+  -ProjectDir DIR      claude code project dir (default: current dir)
+  -ClaudeScope MODE    project (default) | user | skip
+  -SkipCodex           do not touch the codex config
+  -Force               overwrite existing configs
+  -SkipVerify          skip the connectivity check
+'@
     exit 0
 }
 
-# --- 0. prerequisites ---
+# config: parameters > environment variables > .env
+function Read-DotEnv([string]$Path) {
+    $values = @{}
+    if (-not (Test-Path -LiteralPath $Path)) { return $values }
+    foreach ($raw in [System.IO.File]::ReadAllLines($Path)) {
+        $line = $raw.Trim()
+        if ($line.Length -eq 0 -or $line.StartsWith("#")) { continue }
+        $eq = $line.IndexOf("=")
+        if ($eq -lt 1) { continue }
+        $key = $line.Substring(0, $eq).Trim()
+        $value = $line.Substring($eq + 1).Trim()
+        if ($value.Length -ge 2) {
+            $first = $value[0]
+            $last = $value[$value.Length - 1]
+            if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+        }
+        $values[$key] = $value
+    }
+    return $values
+}
+
+$scriptDir = $PSScriptRoot
+if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
+$envFileExplicit = -not [string]::IsNullOrWhiteSpace($EnvFile)
+if (-not $envFileExplicit) { $EnvFile = Join-Path $scriptDir ".env" }
+if ($envFileExplicit -and -not (Test-Path -LiteralPath $EnvFile)) {
+    Write-Err "env 文件不存在: $EnvFile"
+    exit 1
+}
+$dotenv = Read-DotEnv $EnvFile
+
+if ([string]::IsNullOrWhiteSpace($SshHost) -and -not [string]::IsNullOrWhiteSpace($env:MCP_SSH_HOST)) {
+    $SshHost = $env:MCP_SSH_HOST
+}
+if ([string]::IsNullOrWhiteSpace($SshHost) -and $dotenv.ContainsKey("MCP_SSH_HOST")) {
+    $SshHost = $dotenv["MCP_SSH_HOST"]
+}
+if ([string]::IsNullOrWhiteSpace($ServerDir) -and -not [string]::IsNullOrWhiteSpace($env:MCP_SERVER_DIR)) {
+    $ServerDir = $env:MCP_SERVER_DIR
+}
+if ([string]::IsNullOrWhiteSpace($ServerDir) -and $dotenv.ContainsKey("MCP_SERVER_DIR")) {
+    $ServerDir = $dotenv["MCP_SERVER_DIR"]
+}
+
+if ([string]::IsNullOrWhiteSpace($SshHost)) {
+    Write-Err "未配置 SSH 目标。请复制 .env.example 为 .env 并填写 MCP_SSH_HOST,或使用 -SshHost 指定"
+    exit 1
+}
+if ([string]::IsNullOrWhiteSpace($ServerDir)) {
+    Write-Err "未配置服务器安装目录。请复制 .env.example 为 .env 并填写 MCP_SERVER_DIR,或使用 -ServerDir 指定"
+    exit 1
+}
+if ($SshHost.StartsWith("-") -or $SshHost -notmatch '^[A-Za-z0-9._@:\[\]-]+$') {
+    Write-Err "SSH 目标格式无效(仅允许字母、数字、. _ @ : [ ] -): $SshHost"
+    exit 1
+}
+$ServerDir = $ServerDir.TrimEnd([char]'/')
+if ($ServerDir -notmatch '^/[A-Za-z0-9._/-]+$' -or $ServerDir.StartsWith('//') -or $ServerDir -match '(^|/)\.\.(/|$)') {
+    Write-Err "服务器安装目录格式无效(须为绝对路径,仅允许字母、数字、. _ / -): $ServerDir"
+    exit 1
+}
+
+Write-Host "目标: $SshHost:$ServerDir"
+
+# 0. prerequisites
 $sshExe = "$env:WINDIR\System32\OpenSSH\ssh.exe"
 if (-not (Test-Path $sshExe)) {
     $sshExe = (Get-Command ssh -ErrorAction SilentlyContinue).Source
@@ -54,18 +124,18 @@ if (-not $sshExe) {
 Write-Step "使用 SSH: $sshExe"
 
 if (-not $SkipVerify) {
-    Write-Step "验证与树莓派的连通性(约 10 秒)..."
-    & $sshExe -o BatchMode=yes -o ConnectTimeout=8 -q $PiHost "cd $ServerDir && ./venv/bin/python tests/test_mcp_handshake.py" 2>&1 | Select-Object -Last 4
+    Write-Step "验证与服务器的连通..."
+    & $sshExe -o BatchMode=yes -o ConnectTimeout=8 -q $SshHost "cd $ServerDir && ./venv/bin/python tests/test_mcp_handshake.py" 2>&1 | Select-Object -Last 4
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "服务器侧验证失败(exit=$LASTEXITCODE)。请先在树莓派上运行 install.sh,并确认 SSH 免密登录已配置"
+        Write-Err "服务器侧验证失败(exit=$LASTEXITCODE)。请先在服务器上运行 install.sh,并确认 SSH 免密登录已配置"
         exit 1
     }
     Write-Host "服务器验证通过 ✓"
 }
 
-$entryArgs = @("-o", "BatchMode=yes", "-q", $PiHost, "$ServerDir/bin/mcp-server")
+$entryArgs = @("-o", "BatchMode=yes", "-q", $SshHost, "$ServerDir/bin/mcp-server")
 
-# --- 1. claude code ---
+# 1. claude code
 if ($ClaudeScope -ne "skip") {
     if ($ClaudeScope -eq "user") {
         Write-Step "Claude Code(user 级): 调用 claude mcp add"
@@ -80,7 +150,7 @@ if ($ClaudeScope -ne "skip") {
             Write-Err "claude mcp add 失败(exit=$LASTEXITCODE)"
             exit 1
         }
-        Write-Host "已注册到用户级配置 ✓"
+        Write-Host "已注册到用户配置 ✓"
     } else {
         Write-Step "Claude Code(项目级): $ProjectDir.mcp.json"
         if ([string]::IsNullOrWhiteSpace($ProjectDir)) { $ProjectDir = (Get-Location).Path }
@@ -112,7 +182,7 @@ if ($ClaudeScope -ne "skip") {
     }
 }
 
-# --- 2. codex ---
+# 2. codex
 if (-not $SkipCodex) {
     Write-Step "Codex: ~/.codex/config.toml"
     $codexCfg = Join-Path $env:USERPROFILE ".codex\config.toml"
@@ -120,7 +190,7 @@ if (-not $SkipCodex) {
 # [wordpress-mcp-plugin] managed by install.ps1, do not edit
 [mcp_servers.wordpress-blog]
 command = '$sshExe'
-args = ["-o", "BatchMode=yes", "-q", "$PiHost", "$ServerDir/bin/mcp-server"]
+args = ["-o", "BatchMode=yes", "-q", "$SshHost", "$ServerDir/bin/mcp-server"]
 # [/wordpress-mcp-plugin]
 "@
     $content = ""
@@ -149,7 +219,5 @@ args = ["-o", "BatchMode=yes", "-q", "$PiHost", "$ServerDir/bin/mcp-server"]
 }
 
 Write-Host ""
-Write-Host "======================================================"
 Write-Host " 接入完成。重启 Claude Code / Codex 会话后即可使用"
 Write-Host " 工具前缀 wp_,共 14 个;写作规范见 blog_writing_guide prompt"
-Write-Host "======================================================"

@@ -7,8 +7,8 @@
         "-o",
         "BatchMode=yes",
         "-q",
-        "pi@mypi",
-        "/home/pi/wordpress-mcp/bin/mcp-server"
+        "user@host",
+        "/home/user/wordpress-mcp/bin/mcp-server"
       ]
     }
   }

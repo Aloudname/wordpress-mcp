@@ -23,17 +23,17 @@
 
   <!-- server -->
   <rect class="node" x="180" y="138" width="340" height="98" rx="8"/>
-  <text class="title" x="350" y="163" text-anchor="middle">WordPress 主机(如树莓派)</text>
-  <text class="mono" x="350" y="186" text-anchor="middle">/home/pi/wordpress-mcp</text>
-  <text class="detail" x="350" y="207" text-anchor="middle">按需进程:venv/bin/python -m wordpress_mcp</text>
+  <text class="title" x="350" y="163" text-anchor="middle">WordPress 主机(e.g. 树莓派)</text>
+  <text class="mono" x="350" y="186" text-anchor="middle">$HOME/wordpress-mcp</text>
+  <text class="detail" x="350" y="207" text-anchor="middle">按需进程: venv/bin/python -m wordpress_mcp</text>
 
   <path class="edge" d="M 350 236 V 294" marker-end="url(#arrow)"/>
-  <text class="label" x="350" y="270" text-anchor="middle">Basic Auth:专用用户 mcp_agent(editor 角色)的应用密码</text>
+  <text class="label" x="350" y="270" text-anchor="middle">Basic Auth: 专用用户 mcp_agent(editor)的应用密码</text>
 
   <!-- loopback endpoint -->
   <rect class="node" x="190" y="300" width="320" height="76" rx="8"/>
   <text class="mono" x="350" y="326" text-anchor="middle">https://127.0.0.1:8443</text>
-  <text class="detail" x="350" y="348" text-anchor="middle">nginx 回环自签 TLS,独立站点块,无缓存</text>
+  <text class="detail" x="350" y="348" text-anchor="middle">nginx 回环自签 TLS, 独立站点块, 无缓存</text>
 
   <path class="edge" d="M 350 376 V 432" marker-end="url(#arrow)"/>
 

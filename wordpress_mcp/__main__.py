@@ -1,10 +1,13 @@
 """entry point: python -m wordpress_mcp (stdio transport)."""
 
-from .server import mcp
+from .server import client, mcp
 
 
 def main() -> None:
-    mcp.run()
+    try:
+        mcp.run()
+    finally:
+        client.close()
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import logging
 import sys
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 
 from .wp_client import WordpressAPIError, WordpressClient
 
@@ -27,7 +28,7 @@ log = logging.getLogger("wordpress_mcp")
 mcp = MCPServer(
     "wordpress-blog",
     instructions=(
-        "WordPress 博客管理工具(aloudname.top)。"
+        "WordPress 主题的网站管理工具。"
         "写作流程:先用 markdown 起草,再 markdown_to_html 转换排版,"
         "用 wp_create_post 以 draft 状态创建,人工审阅后改为 publish。"
         "修改文章前先 wp_get_post 读取现状。删除默认进回收站。"
@@ -36,9 +37,17 @@ mcp = MCPServer(
 
 client = WordpressClient()  # validate config at startup, fail fast
 
+# tool hints for clients that ask before running destructive operations
+_READ_ONLY = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+_ADDITIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False,
+                            idempotentHint=False, openWorldHint=False)
+_OVERWRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                             idempotentHint=True, openWorldHint=False)
+_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                               idempotentHint=False, openWorldHint=False)
 
-# ---- helpers ----------------------------------------------------------
 
+# helpers
 
 def _plain(value: object) -> str | None:
     """Extract plain text from a WP {rendered/raw/protected} object."""
@@ -92,10 +101,9 @@ def _post_detail(post: dict) -> dict:
     return out
 
 
-# ---- posts ------------------------------------------------------------
+# posts
 
-
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_list_posts(
     status: str = "publish", search: str | None = None,
     category: str | None = None, tag: str | None = None,
@@ -123,7 +131,7 @@ def wp_list_posts(
     return {"total": total, "page": page, "items": [_post_summary(p) for p in data]}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_get_post(id_or_slug: str, format_: str = "markdown") -> dict:
     """读取单篇文章全文。
 
@@ -134,7 +142,7 @@ def wp_get_post(id_or_slug: str, format_: str = "markdown") -> dict:
     return _post_detail(client.get_post(id_or_slug, format_=format_))
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ADDITIVE)
 def wp_create_post(
     title: str, content: str, excerpt: str | None = None,
     status: str = "draft",
@@ -162,7 +170,7 @@ def wp_create_post(
     return _post_detail(post)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_OVERWRITE)
 def wp_update_post(
     post_id: int, title: str | None = None, content: str | None = None,
     excerpt: str | None = None, status: str | None = None,
@@ -197,7 +205,7 @@ def wp_update_post(
     return _post_detail(client.update_post(post_id, **fields))
 
 
-@mcp.tool()
+@mcp.tool(annotations=_DESTRUCTIVE)
 def wp_delete_post(post_id: int, trash: bool = True) -> dict:
     """删除文章。默认移入回收站(后台可恢复);永久删除需显式 trash=false。
 
@@ -212,7 +220,7 @@ def wp_delete_post(post_id: int, trash: bool = True) -> dict:
 # ---- pages ------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_list_pages(status: str = "publish", search: str | None = None,
                   per_page: int = 10, page: int = 1) -> dict:
     """列出独立页面(如「关于」「友链」)。
@@ -227,7 +235,7 @@ def wp_list_pages(status: str = "publish", search: str | None = None,
     return {"total": total, "page": page, "items": [_post_summary(p) for p in data]}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_get_page(id_or_slug: str, format_: str = "markdown") -> dict:
     """读取单个页面的内容。
 
@@ -238,7 +246,7 @@ def wp_get_page(id_or_slug: str, format_: str = "markdown") -> dict:
     return _post_detail(client.get_page(id_or_slug, format_=format_))
 
 
-@mcp.tool()
+@mcp.tool(annotations=_OVERWRITE)
 def wp_update_page(
     page_id: int, title: str | None = None, content: str | None = None,
     excerpt: str | None = None, status: str | None = None,
@@ -269,7 +277,7 @@ def wp_update_page(
 # ---- taxonomy & media -------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_list_categories() -> dict:
     """列出全部分类(id/名称/slug/文章数),创建文章时用于选择分类。"""
     data, total = client.list_categories()
@@ -279,7 +287,7 @@ def wp_list_categories() -> dict:
     ]}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_list_tags() -> dict:
     """列出全部标签(id/名称/slug/文章数)。"""
     data, total = client.list_tags()
@@ -289,7 +297,7 @@ def wp_list_tags() -> dict:
     ]}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def wp_list_media(per_page: int = 10, page: int = 1, search: str | None = None) -> dict:
     """列出媒体库中的文件(图片/视频等)。
 
@@ -309,7 +317,7 @@ def wp_list_media(per_page: int = 10, page: int = 1, search: str | None = None) 
     ]}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_ADDITIVE)
 def wp_upload_media(
     filename: str, base64_data: str,
     alt_text: str | None = None, caption: str | None = None,
@@ -334,13 +342,13 @@ def wp_upload_media(
 # ---- formatting helpers -----------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def markdown_to_html(markdown_text: str) -> dict:
     """把 Markdown 排版转换为 WordPress 正文 HTML(含表格/代码块/有序列表扩展)。"""
     return {"html": client.md_to_html(markdown_text)}
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 def html_to_markdown(html_text: str) -> dict:
     """把 HTML 转换为 Markdown(阅读与草稿编辑用,注意:转换有损,回写前请核对)。"""
     return {"markdown": client.html_to_md(html_text)}
