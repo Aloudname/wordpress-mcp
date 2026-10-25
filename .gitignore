@@ -5,13 +5,14 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.pytest_cache/
 
-# 密钥与环境(绝不入库)
+# local env
 config.env
 .env
 
-# 本地日志
+# local logs
 *.log
 
-# 客户端项目配置(由 install.ps1 生成)
+# client settings
 .mcp.json
